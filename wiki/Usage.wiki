@@ -1,0 +1,20 @@
+#summary One-sentence summary of this page.
+
+= Introduction =
+
+This is a brief project usage
+
+
+= Details =
+
+The project is host by google appengine : http://sasarssfilter.appspot.com/rssfilter
+
+The servlet had two parameter: 
+ - feedUrl : the url of the feed you want to filter<br/>
+ - filter : (multiple) field,value.
+For the moment only title field is supported. But I can had more if you need.
+
+Example:
+http://sasarssfilter.appspot.com/rssfilter?feedUrl=http://www.lequipe.fr/rss/actu_rss_Auto-Moto.xml&filter=title,WRC
+
+This url took the feed "http://www.lequipe.fr/rss/actu_rss_Auto-Moto.xml" and show only item's having WRC in there title
