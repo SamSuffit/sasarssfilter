@@ -22,7 +22,6 @@ import com.google.api.client.http.HttpResponse;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.UrlEncodedContent;
 import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.server.spi.IoUtil;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.Entity;
@@ -30,6 +29,11 @@ import com.google.appengine.api.datastore.EntityNotFoundException;
 import com.google.appengine.api.datastore.Key;
 import com.google.appengine.api.datastore.KeyFactory;
 import com.google.appengine.api.datastore.Transaction;
+import com.sun.syndication.feed.synd.SyndFeed;
+import com.sun.syndication.io.FeedException;
+import com.sun.syndication.io.SyndFeedInput;
+import com.sun.syndication.io.SyndFeedOutput;
+import com.sun.syndication.io.XmlReader;
 
 
 public class ApsideLyonRssrServlet extends HttpServlet {
@@ -122,11 +126,13 @@ public class ApsideLyonRssrServlet extends HttpServlet {
 //				System.out.println(p.getName() + ":" + p.getValue());
 //			}
 			
-			logToApsideSite(requestFactory, app);
-			
-			generateRssFeed(response, requestFactory);
-			
-			logger.info("Rss feed downloaded");
+			if(logToApsideSite(requestFactory, app)) {
+				generateRssFeed(response, requestFactory);
+				logger.info("Rss feed downloaded");
+			}
+			else {
+				response.sendError(404);
+			}
 		} catch (Exception e) {
 			logger.severe("Error while generating output Feed");
 			e.printStackTrace();
@@ -134,23 +140,32 @@ public class ApsideLyonRssrServlet extends HttpServlet {
 		}
 	}
 
-
 	private void generateRssFeed(HttpServletResponse response,
 			HttpRequestFactory requestFactory) throws IOException,
 			UnsupportedEncodingException {
-		HttpRequest feedRequest = requestFactory.buildGetRequest(new GenericUrl("http://apsidelyon.free.fr/index.php?format=feed&amp;type=rss"));
-		HttpResponse feedResponse = feedRequest.execute();
+
+		try {
+			HttpRequest feedRequest = requestFactory.buildGetRequest(new GenericUrl("http://apsidelyon.free.fr/index.php?format=feed&amp;type=rss"));
+			HttpResponse feedResponse = feedRequest.execute();
+			
+			SyndFeedInput input = new SyndFeedInput();
+			SyndFeed feed = input.build(new XmlReader(feedResponse.getContent()));
+			
+			//Generate Output
+			ServletOutputStream outputStream = response.getOutputStream();
+			response.setCharacterEncoding(feed.getEncoding());
+			response.setContentType("application/xml");
+			SyndFeedOutput output = new SyndFeedOutput();
+			output.output(feed,new OutputStreamWriter(outputStream,"UTF-8"));
+		} catch (FeedException e) {
+			logger.severe("Error while generating output Feed");
+			e.printStackTrace();
+			response.sendError(403,e.getLocalizedMessage());
+		}
 		
-		ServletOutputStream outputStream = response.getOutputStream();
-		response.setCharacterEncoding(feedResponse.getContentEncoding());
-		response.setContentType("application/xml");
-		OutputStreamWriter osw = new OutputStreamWriter(outputStream,"UTF-8");
-		osw.append(IoUtil.readStream(feedResponse.getContent()));
-		osw.close();
 	}
 
-
-	private void logToApsideSite(HttpRequestFactory requestFactory,
+	private boolean logToApsideSite(HttpRequestFactory requestFactory,
 			ApsidePageParser app) throws IOException {
 		
 		DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
@@ -165,13 +180,15 @@ public class ApsideLyonRssrServlet extends HttpServlet {
 				paramsMap.put(p.getName() ,p.getValue());
 			}
 			HttpRequest loginRequest = requestFactory.buildPostRequest(loginUrl,new UrlEncodedContent(paramsMap));
-			loginRequest.execute();
-			
-			
+			HttpResponse resp = loginRequest.execute();
+			if(resp.getStatusCode() != 200) {
+				logger.severe("login response error:" + resp.getStatusCode());
+				return false;
+			}
 		} catch (Exception e) {
 			logger.severe(e.getMessage());
 		} 
-		
+		return true;		
 		
 	}
 	
